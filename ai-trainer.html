@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Train Your Own AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: bright, friendly classroom tool, big buttons for children
+   IDEA: the 4-step Teachable Machine workflow from the lesson sheet
+   PICTURE: the live webcam + confidence bars are the picture
+   COLOUR and TYPE: lesson-sheet purple + blue, class colours yellow/pink/green; Baloo 2 + Nunito
+   LAYOUT: steps strip, then camera | classes | train+preview, then test log */
+:root{--bg:#f3f0ff;--card:#fff;--ink:#1e1446;--soft:#5b5480;--pur:#6a2cd8;--blu:#2f6bff;--line:#ddd5fb;--ok:#18a058;--bad:#e0335a}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Nunito,system-ui,sans-serif}
+h1,h2,h3{font-family:"Baloo 2",Nunito,sans-serif;margin:0;line-height:1.1}
+header{background:linear-gradient(120deg,#3b1497,var(--pur) 55%,var(--blu));color:#fff;padding:18px max(4vw,16px)}
+header h1{font-size:clamp(26px,4vw,40px)}
+header p{margin:4px 0 0;opacity:.9}
+.steps{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.step{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.25);padding:6px 14px 6px 6px;border-radius:999px;font-weight:800}
+.step b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#fff;color:var(--pur)}
+.step.on{background:#fff;color:var(--pur)}.step.on b{background:var(--pur);color:#fff}
+.step.done b{background:var(--ok);color:#fff}
+main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:18px;padding:18px max(4vw,16px);max-width:1400px;margin:auto}
+@media(max-width:1050px){main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.col-train{grid-column:1/-1}}
+@media(max-width:700px){main{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border-radius:20px;padding:16px;box-shadow:0 4px 0 var(--line);border:2px solid var(--line)}
+.card+.card{margin-top:18px}
+.card h2{font-size:24px;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.num{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--pur);color:#fff;font-size:18px}
+.cam{position:relative;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#1e1446;display:grid;place-items:center}
+.cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.cam .msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#fff;padding:20px}
+.rec{position:absolute;top:10px;left:10px;background:var(--bad);color:#fff;font-weight:800;padding:4px 10px;border-radius:999px;display:none}
+.rec.show{display:block}
+button{font:inherit;font-weight:800;border:0;border-radius:14px;padding:10px 16px;min-height:44px;cursor:pointer;background:var(--pur);color:#fff;touch-action:none;user-select:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--blu);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.ghost{background:#efeaff;color:var(--pur)}
+button.big{width:100%;font-size:20px;padding:14px}
+.status{font-size:14px;color:var(--soft);margin-top:8px}
+.cls{border:3px solid var(--c);border-radius:18px;padding:12px;margin-bottom:12px;background:color-mix(in srgb,var(--c) 10%,#fff)}
+.cls-top{display:flex;gap:8px;align-items:center}
+.cls input{flex:1;font:800 20px "Baloo 2",sans-serif;border:2px solid transparent;background:transparent;border-radius:10px;padding:2px 8px;color:var(--ink)}
+.cls input:hover{border-color:var(--line)}
+.count{font-weight:800;background:var(--c);color:#1e1446;border-radius:999px;padding:2px 12px;white-space:nowrap}
+.cls-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.hold{background:var(--ink)}
+.hold.active{background:var(--bad)}
+.thumbs{display:flex;gap:4px;overflow-x:auto;margin-top:10px;min-height:52px;padding-bottom:4px}
+.thumbs img{width:48px;height:48px;border-radius:8px;flex:none;object-fit:cover}
+.thumbs .empty{color:var(--soft);font-size:14px;align-self:center}
+.quality{font-size:14px;margin-top:6px;font-weight:700}
+.bar-row{margin:10px 0}
+.bar-lab{display:flex;justify-content:space-between;font-weight:800}
+.bar{height:26px;background:#efeaff;border-radius:999px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;width:0;background:var(--c);border-radius:999px;transition:width .15s}
+.verdict{text-align:center;padding:14px;border-radius:16px;background:#efeaff;margin-bottom:6px}
+.verdict .big{font:800 clamp(30px,4vw,44px) "Baloo 2",sans-serif;line-height:1}
+.prog{height:14px;background:#efeaff;border-radius:999px;overflow:hidden;margin-top:12px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--pur),var(--blu))}
+.tip{background:#fff8d6;border:2px solid #f3d65b;border-radius:14px;padding:10px 12px;font-size:15px;margin-top:12px}
+.log{padding:0 max(4vw,16px) 30px;max-width:1400px;margin:auto}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:left;padding:10px 8px;border-bottom:2px solid var(--line);vertical-align:middle}
+th{font-family:"Baloo 2",sans-serif;font-size:17px;color:var(--pur)}
+td.r{text-align:right;white-space:nowrap}
+.yn{display:flex;gap:6px}
+.yn button{padding:6px 12px;min-height:38px;background:#efeaff;color:var(--ink)}
+.yn button.y.sel{background:var(--ok);color:#fff}.yn button.n.sel{background:var(--bad);color:#fff}
+.words{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:14px}
+.words div{background:#efeaff;border-radius:14px;padding:10px 12px;font-size:15px}
+.words b{color:var(--pur)}
+.modal{position:fixed;inset:0;background:rgba(30,20,70,.5);display:none;place-items:center;padding:16px;z-index:9}
+.modal.show{display:grid}
+.modal .card{max-width:420px}
+@media(prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Train Your Own AI 🤖</h1>
+  <p>Teach the computer to recognise Rock, Paper and Scissors, from data to decisions.</p>
+  <div class="steps" id="steps">
+    <div class="step" data-s="1"><b>1</b>Create classes</div>
+    <div class="step" data-s="2"><b>2</b>Collect data</div>
+    <div class="step" data-s="3"><b>3</b>Train</div>
+    <div class="step" data-s="4"><b>4</b>Test</div>
+  </div>
+</header>
+
+<main>
+  <section class="col-cam">
+    <div class="card">
+      <h2><span class="num">📷</span>Webcam</h2>
+      <div class="cam">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="msg" id="camMsg"><div><p style="font-size:18px;font-weight:800">Turn on the camera to start</p><button id="camBtn">Start camera</button></div></div>
+        <div class="rec" id="recBadge">● Recording</div>
+      </div>
+      <div class="status" id="status">Loading the AI brain (MobileNet)…</div>
+      <div class="tip"><b>Good data = good AI.</b> Record lots of samples: move your hand closer and further, turn it, and try different backgrounds and lighting.</div>
+    </div>
+  </section>
+
+  <section class="col-classes">
+    <div class="card">
+      <h2><span class="num">1</span>Classes &amp; data</h2>
+      <div id="classes"></div>
+      <div class="cls-btns">
+        <button class="ghost" id="addCls">+ Add a class</button>
+        <button class="ghost" id="resetAll">Clear all samples</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="col-train">
+    <div class="card">
+      <h2><span class="num">3</span>Train</h2>
+      <button class="big" id="trainBtn" disabled>Train model</button>
+      <div class="prog"><i id="progBar"></i></div>
+      <div class="status" id="trainStatus">Collect samples for at least 2 classes first.</div>
+    </div>
+    <div class="card">
+      <h2><span class="num">4</span>Preview</h2>
+      <div class="verdict"><div class="status" style="margin:0">The AI thinks this is…</div><div class="big" id="verdict">?</div></div>
+      <div id="bars"></div>
+      <button class="ghost" id="pauseBtn" style="width:100%;margin-top:6px" disabled>Pause preview</button>
+    </div>
+  </section>
+</main>
+
+<section class="log">
+  <div class="card">
+    <h2><span class="num">7</span>Classroom experiment</h2>
+    <p style="margin-top:0">Run each test, show a hand sign to the camera, then press <b>Record result</b>. Mark whether the AI was correct.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Test</th><th>Training data</th><th>Tested on</th><th>Showed</th><th>AI said</th><th class="r">Confidence</th><th>Correct?</th><th></th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+    <div class="words">
+      <div><b>Class</b>: a label or category the model learns (e.g. Rock).</div>
+      <div><b>Sample</b>: one example of data (one picture).</div>
+      <div><b>Confidence</b>: how sure the model is about its prediction (%).</div>
+      <div><b>Accuracy</b>: how often the model’s predictions are correct.</div>
+      <div><b>Bias</b>: when one-sided data makes a model unfair or wrong for some cases.</div>
+      <div><b>Supervised learning</b>: learning from labelled examples (input + correct answer).</div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="modal"><div class="card"><h2 id="mTitle">Notice</h2><p id="mText"></p><button id="mOk">OK</button></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+<script>
+{
+const COLORS=['#ffd84d','#ff8fc8','#7fe0a8','#8fc3ff','#ffb06b','#c9a3ff'];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let net=null,model=null,stream=null,trainedFor=null,previewOn=false,recordingIdx=-1,recTimer=null,lastPred=null;
+let classes=[{name:'Rock'},{name:'Paper'},{name:'Scissors'}].map((c,i)=>({...c,color:COLORS[i],emb:[],thumbs:[]}));
+const crop=document.createElement('canvas');crop.width=crop.height=224;
+const cctx=crop.getContext('2d',{willReadFrequently:true});
+
+function notify(t,m){$('mTitle').textContent=t;$('mText').textContent=m;$('modal').classList.add('show')}
+$('mOk').onclick=()=>$('modal').classList.remove('show');
+
+function setStep(){
+  const total=classes.reduce((a,c)=>a+c.emb.length,0);
+  const s=model&&!stale()?4:total?(readyToTrain()?3:2):1;
+  document.querySelectorAll('.step').forEach(el=>{const n=+el.dataset.s;el.classList.toggle('on',n===s);el.classList.toggle('done',n<s)});
+}
+const readyToTrain=()=>classes.filter(c=>c.emb.length>0).length>=2;
+const dataKey=()=>classes.map(c=>c.name+':'+c.emb.length).join('|');
+const stale=()=>trainedFor!==dataKey();
+
+function quality(n,max){
+  if(n===0)return['No samples yet','var(--soft)'];
+  if(n<20)return['Poor data: too few samples','var(--bad)'];
+  if(max>n*2)return['Unbalanced: fewer than other classes','#c47a00'];
+  if(n<60)return['OK data: more samples will help','#c47a00'];
+  return['Good data!','var(--ok)'];
+}
+
+function renderClasses(){
+  const max=Math.max(...classes.map(c=>c.emb.length));
+  $('classes').innerHTML=classes.map((c,i)=>{
+    const [q,qc]=quality(c.emb.length,max);
+    const th=c.thumbs.slice(-40).map(t=>`<img src="${t}" alt="">`).join('')||'<span class="empty">Hold the record button to add samples</span>';
+    return `<div class="cls" style="--c:${c.color}">
+      <div class="cls-top"><input value="${esc(c.name)}" data-i="${i}" aria-label="Class name"><span class="count">${c.emb.length} samples</span></div>
+      <div class="quality" style="color:${qc}">${q}</div>
+      <div class="thumbs">${th}</div>
+      <div class="cls-btns">
+        <button class="hold${recordingIdx===i?' active':''}" data-hold="${i}" ${stream&&net?'':'disabled'}>${recordingIdx===i?'● Recording…':'Hold to record'}</button>
+        <label class="ghost" style="display:inline-flex;align-items:center;padding:10px 16px;border-radius:14px;background:#efeaff;color:var(--pur);font-weight:800;cursor:pointer">Upload<input type="file" accept="image/*" multiple data-up="${i}" hidden></label>
+        <button class="ghost" data-clear="${i}">Clear</button>
+        ${classes.length>2?`<button class="ghost" data-del="${i}" aria-label="Delete class">🗑</button>`:''}
+      </div></div>`}).join('');
+  $('trainBtn').disabled=!readyToTrain()||!net;
+  if(!net)$('trainStatus').textContent='Waiting for the AI brain to load…';
+  else if(!readyToTrain())$('trainStatus').textContent='Collect samples for at least 2 classes first.';
+  else if(model&&stale())$('trainStatus').textContent='Data changed. Press Train again to update the model.';
+  else if(!model)$('trainStatus').textContent='Ready! Press Train model.';
+  setStep();
+}
+
+// events on class list
+$('classes').addEventListener('input',e=>{const i=e.target.dataset.i;if(i!=null){classes[i].name=e.target.value||'Class '+(+i+1);renderBars();setStep()}});
+$('classes').addEventListener('change',e=>{if(e.target.dataset.i!=null)renderClasses()});
+$('classes').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.clear!=null){disposeClass(classes[b.dataset.clear]);renderClasses()}
+  if(b.dataset.del!=null){disposeClass(classes[b.dataset.del]);classes.splice(+b.dataset.del,1);model=null;trainedFor=null;renderClasses();renderBars()}
+});
+$('classes').addEventListener('pointerdown',e=>{const b=e.target.closest('[data-hold]');if(b&&!b.disabled){e.preventDefault();startRec(+b.dataset.hold)}});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>document.addEventListener(ev,e=>{if(ev!=='pointerleave'||e.target===document.documentElement)stopRec()}));
+document.addEventListener('keydown',e=>{const b=document.activeElement;if((e.key===' '||e.key==='Enter')&&b&&b.dataset&&b.dataset.hold!=null&&!e.repeat){e.preventDefault();startRec(+b.dataset.hold)}});
+document.addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter')stopRec()});
+$('classes').addEventListener('change',async e=>{
+  const i=e.target.dataset.up;if(i==null||!net)return;
+  for(const f of e.target.files){
+    const img=new Image();img.src=URL.createObjectURL(f);
+    await img.decode().catch(()=>null);if(!img.width)continue;
+    drawSquare(img,img.width,img.height,false);addSample(+i);URL.revokeObjectURL(img.src);
+  }
+  renderClasses();
+});
+function disposeClass(c){c.emb.forEach(t=>t.dispose());c.emb=[];c.thumbs=[]}
+
+$('addCls').onclick=()=>{if(classes.length>=6)return notify('Limit reached','You can have up to 6 classes.');const n=classes.length;classes.push({name:'Class '+(n+1),color:COLORS[n],emb:[],thumbs:[]});model=null;trainedFor=null;renderClasses();renderBars()};
+$('resetAll').onclick=()=>{classes.forEach(disposeClass);model=null;trainedFor=null;renderClasses();renderBars()};
+
+function drawSquare(src,w,h,mirror){
+  const s=Math.min(w,h);cctx.save();
+  if(mirror){cctx.translate(224,0);cctx.scale(-1,1)}
+  cctx.drawImage(src,(w-s)/2,(h-s)/2,s,s,0,0,224,224);cctx.restore();
+}
+function grabFrame(){const v=$('video');if(!v.videoWidth)return false;drawSquare(v,v.videoWidth,v.videoHeight,true);return true}
+function addSample(i){
+  const t=tf.tidy(()=>net.infer(crop,true));classes[i].emb.push(t);
+  const th=document.createElement('canvas');th.width=th.height=64;th.getContext('2d').drawImage(crop,0,0,64,64);
+  classes[i].thumbs.push(th.toDataURL('image/jpeg',.7));
+}
+function startRec(i){
+  if(recordingIdx>=0)return;recordingIdx=i;$('recBadge').classList.add('show');
+  $('recBadge').textContent='● Recording '+classes[i].name;
+  renderClasses();
+  recTimer=setInterval(()=>{if(grabFrame()){addSample(i);const el=document.querySelectorAll('.count')[i];if(el)el.textContent=classes[i].emb.length+' samples'}},90);
+}
+function stopRec(){if(recordingIdx<0)return;clearInterval(recTimer);recordingIdx=-1;$('recBadge').classList.remove('show');renderClasses()}
+
+$('camBtn').onclick=async()=>{
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});
+    $('video').srcObject=stream;$('camMsg').style.display='none';renderClasses();
+  }catch(err){notify('Camera not available','Please allow camera access in the browser (click the camera icon in the address bar). If there is no webcam, use the Upload buttons instead. ('+err.name+')')}
+};
+
+async function train(){
+  stopPreview();
+  const used=classes.map((c,i)=>({c,i})).filter(o=>o.c.emb.length);
+  const xs=tf.concat(used.flatMap(o=>o.c.emb));
+  const labels=used.flatMap((o,k)=>o.c.emb.map(()=>k));
+  const ys=tf.oneHot(tf.tensor1d(labels,'int32'),used.length);
+  if(model)model.dispose();
+  model=tf.sequential({layers:[
+    tf.layers.dense({inputShape:[xs.shape[1]],units:100,activation:'relu'}),
+    tf.layers.dense({units:used.length,activation:'softmax'})]});
+  model.compile({optimizer:tf.train.adam(0.001),loss:'categoricalCrossentropy',metrics:['accuracy']});
+  model.classMap=used.map(o=>o.i);
+  const EPOCHS=50;$('trainBtn').disabled=true;$('trainBtn').textContent='Training…';
+  await model.fit(xs,ys,{epochs:EPOCHS,batchSize:16,shuffle:true,callbacks:{onEpochEnd:(ep,logs)=>{
+    $('progBar').style.width=((ep+1)/EPOCHS*100)+'%';
+    $('trainStatus').textContent=`Learning patterns… round ${ep+1} of ${EPOCHS} · mistakes score (loss): ${logs.loss.toFixed(3)}`;
+  }}});
+  xs.dispose();ys.dispose();
+  trainedFor=dataKey();$('trainBtn').textContent='Train model';
+  $('trainStatus').textContent='Model trained on '+labels.length+' samples. Show your hand to the camera!';
+  renderClasses();renderBars();startPreview();
+}
+$('trainBtn').onclick=()=>train().catch(e=>{notify('Training problem',e.message);$('trainBtn').textContent='Train model';renderClasses()});
+
+function renderBars(){
+  $('bars').innerHTML=classes.map((c,i)=>`<div class="bar-row" style="--c:${c.color}"><div class="bar-lab"><span>${esc(c.name)}</span><span id="pct${i}">0%</span></div><div class="bar"><i id="bar${i}"></i></div></div>`).join('');
+}
+function startPreview(){if(!model||!stream)return;previewOn=true;$('pauseBtn').disabled=false;$('pauseBtn').textContent='Pause preview';loop()}
+function stopPreview(){previewOn=false;$('pauseBtn').textContent='Resume preview'}
+$('pauseBtn').onclick=()=>previewOn?stopPreview():startPreview();
+async function loop(){
+  if(!previewOn)return;
+  if(recordingIdx<0&&grabFrame()&&model){
+    const p=tf.tidy(()=>model.predict(net.infer(crop,true)).dataSync());
+    const full=classes.map(()=>0);model.classMap.forEach((ci,k)=>{if(ci<full.length)full[ci]=p[k]});
+    let best=0;full.forEach((v,i)=>{if(v>full[best])best=i;const b=$('bar'+i),t=$('pct'+i);if(b){b.style.width=(v*100)+'%';t.textContent=Math.round(v*100)+'%'}});
+    lastPred={name:classes[best].name,conf:Math.round(full[best]*100)};
+    $('verdict').textContent=lastPred.name;$('verdict').style.color='inherit';
+  }
+  setTimeout(()=>requestAnimationFrame(loop),60);
+}
+
+// test log
+const TESTS=[['A','About 10 samples per class','Your own hand'],['B','100+ samples per class','Your own hand'],['C','Same model as B',"Your partner's hand"],['D','Add samples from both partners','Both hands']];
+const log=TESTS.map(t=>({t,showed:'',said:'—',conf:'—',ok:null}));
+function renderLog(){
+  $('logBody').innerHTML=log.map((r,i)=>`<tr>
+    <td><b>${r.t[0]}</b></td><td>${r.t[1]}</td><td>${r.t[2]}</td>
+    <td><select data-show="${i}" style="font:inherit;padding:6px;border-radius:10px;border:2px solid var(--line)"><option value="">Choose…</option>${classes.map(c=>`<option ${r.showed===c.name?'selected':''}>${esc(c.name)}</option>`).join('')}</select></td>
+    <td><b>${esc(r.said)}</b></td><td class="r">${r.conf==='—'?'—':r.conf+'%'}</td>
+    <td><div class="yn"><button class="y${r.ok===true?' sel':''}" data-y="${i}">Y</button><button class="n${r.ok===false?' sel':''}" data-n="${i}">N</button></div></td>
+    <td><button class="ghost" data-rec="${i}">Record result</button></td></tr>`).join('');
+}
+$('logBody').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+  if(d.rec!=null){if(!lastPred)return notify('No prediction yet','Train the model first, then show a hand sign to the camera.');const r=log[d.rec];r.said=lastPred.name;r.conf=lastPred.conf;if(r.showed)r.ok=r.showed===r.said}
+  if(d.y!=null)log[d.y].ok=true;
+  if(d.n!=null)log[d.n].ok=false;
+  renderLog();
+});
+$('logBody').addEventListener('change',e=>{const i=e.target.dataset.show;if(i!=null){const r=log[i];r.showed=e.target.value;if(r.said!=='—'&&r.showed)r.ok=r.showed===r.said;renderLog()}});
+
+renderClasses();renderBars();renderLog();
+(async()=>{
+  try{
+    if(typeof tf==='undefined'||typeof mobilenet==='undefined')throw new Error('Could not download the AI library. Check the internet connection.');
+    net=await mobilenet.load({version:2,alpha:0.5});
+    tf.tidy(()=>net.infer(crop,true));
+    $('status').textContent='AI brain loaded ✔ Turn on the camera, then hold a record button.';
+    renderClasses();
+  }catch(e){$('status').textContent='Problem: '+e.message;notify('Could not load the AI',e.message)}
+})();
+}
+</script>
+</body>
+</html>
